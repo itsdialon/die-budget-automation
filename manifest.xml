@@ -26,6 +26,7 @@
 
   <Requirements>
     <Sets DefaultMinVersion="1.1">
+      <Set Name="SharedRuntime" MinVersion="1.1"/>
       <Set Name="ExcelApi" MinVersion="1.7"/>
     </Sets>
   </Requirements>
@@ -39,12 +40,6 @@
   <VersionOverrides
     xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
     xsi:type="VersionOverridesV1_0">
-
-    <Requirements>
-      <bt:Sets DefaultMinVersion="1.1">
-        <bt:Set Name="SharedRuntime" MinVersion="1.1"/>
-      </bt:Sets>
-    </Requirements>
 
     <Hosts>
       <Host xsi:type="Workbook">
@@ -80,7 +75,6 @@
                     <bt:Image size="80" resid="Icon.80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>DieBudgetPane</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
                 </Control>
