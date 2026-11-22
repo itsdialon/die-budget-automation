@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>8b0f6c31-7a42-4d9e-9b51-2a6c8f3d1057</Id>
-  <Version>1.0.1.0</Version>
+  <Version>1.0.2.0</Version>
   <ProviderName>Die-Budget</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Die-Budget Automation"/>
@@ -41,9 +41,9 @@
     xsi:type="VersionOverridesV1_0">
 
     <Requirements>
-      <Sets DefaultMinVersion="1.1">
-        <Set Name="SharedRuntime" MinVersion="1.1"/>
-      </Sets>
+      <bt:Sets DefaultMinVersion="1.1">
+        <bt:Set Name="SharedRuntime" MinVersion="1.1"/>
+      </bt:Sets>
     </Requirements>
 
     <Hosts>
@@ -61,9 +61,13 @@
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="DieBudgetTab">
-              <Label resid="Tab.Label"/>
               <Group id="DieBudgetGroup">
                 <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
                 <Control xsi:type="Button" id="OpenBudget">
                   <Label resid="Button.Label"/>
                   <Supertip>
@@ -76,10 +80,12 @@
                     <bt:Image size="80" resid="Icon.80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>DieBudgetPane</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
                 </Control>
               </Group>
+              <Label resid="Tab.Label"/>
             </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
