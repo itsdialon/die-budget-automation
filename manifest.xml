@@ -6,14 +6,14 @@
   xsi:type="TaskPaneApp">
 
   <Id>8b0f6c31-7a42-4d9e-9b51-2a6c8f3d1057</Id>
-  <Version>1.0.2.0</Version>
+  <Version>1.0.3.0</Version>
   <ProviderName>Die-Budget</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Die-Budget Automation"/>
   <Description DefaultValue="Automatic budget management for Die-Budget."/>
 
   <IconUrl DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-64.png"/>
   <SupportUrl DefaultValue="https://github.com/itsdialon/die-budget-automation"/>
 
   <AppDomains>
@@ -90,7 +90,7 @@
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-16.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-80.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-64.png"/>
       </bt:Images>
 
       <bt:Urls>
