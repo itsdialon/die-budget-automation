@@ -90,7 +90,7 @@
       <bt:Images>
         <bt:Image id="Icon.16" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-16.png"/>
         <bt:Image id="Icon.32" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-64.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://itsdialon.github.io/die-budget-automation/icon-80.png"/>
       </bt:Images>
 
       <bt:Urls>
