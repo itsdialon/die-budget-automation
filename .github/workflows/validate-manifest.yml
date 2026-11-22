@@ -1,4 +1,4 @@
-name: Validate Office Add-in manifest
+name: Validate Office Add-in manifest (production)
 
 on:
   push:
