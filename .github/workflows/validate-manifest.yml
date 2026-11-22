@@ -19,4 +19,4 @@ jobs:
         with:
           node-version: 20
       - name: Validate manifest against Office schema
-        run: npx --yes office-addin-manifest validate manifest.xml
+        run: npx --yes office-addin-manifest validate -p manifest.xml
