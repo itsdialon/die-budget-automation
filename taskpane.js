@@ -1,5 +1,5 @@
-
 let eventQueue = Promise.resolve();
+let worksheetListenerRegistered = false;
 
 function setStatus(message) {
   const element = document.getElementById("status");
@@ -7,49 +7,47 @@ function setStatus(message) {
 }
 
 function isRelevantAddress(address) {
-  const normalized = address.toUpperCase().replace(/\$/g, "");
-
-  // Monthly reset checkbox (merged F18:H18)
-  if (normalized.includes("F18")) return true;
-
-  // Checkboxes H3:H17
-  return /(?:^|[!:])H(?:[3-9]|1[0-7])(?=$|:)/.test(normalized);
+  const normalized = String(address || "").toUpperCase().replace(/\$/g, "");
+  if (/(^|!)F18(?::H18)?$/.test(normalized)) return true;
+  return /(^|!)H(?:[3-9]|1[0-7])$/.test(normalized);
 }
 
 Office.onReady(async (info) => {
   if (info.host !== Office.HostType.Excel) {
-    setStatus("Please open this add-in in Excel.");
+    setStatus("Please open this add-in in Excel for the web.");
     return;
   }
 
   try {
-    await Excel.run(async (context) => {
-      const ws = context.workbook.worksheets.getItem("Die-Budget");
+    if (Office.addin && Office.addin.setStartupBehavior) {
+      await Office.addin.setStartupBehavior(Office.StartupBehavior.load);
+    }
 
-      // Reserve column X for duplicate prevention
-      ws.getRange("X2").values = [["Processed"]];
-      ws.getRange("X:X").format.columnHidden = true;
-
-      // Register automatic change listener
-      ws.onChanged.add(handleWorksheetChanged);
-
-      await context.sync();
-    });
-
-    setStatus("Die-Budget Automation is active. Listening for checkbox changes.");
-
+    await registerWorksheetListener();
   } catch (error) {
     setStatus("Initialization error: " + error.message);
     console.error(error);
   }
 });
 
+async function registerWorksheetListener() {
+  if (worksheetListenerRegistered) return;
+
+  await Excel.run(async (context) => {
+    const ws = context.workbook.worksheets.getItem("Die-Budget");
+    ws.onChanged.add(handleWorksheetChanged);
+    await context.sync();
+  });
+
+  worksheetListenerRegistered = true;
+  setStatus("Die-Budget Automation is active. Change a checkbox in H3:H17 or F18.");
+}
+
 function handleWorksheetChanged(event) {
   if (!isRelevantAddress(event.address)) return;
 
-  // Queue events to prevent simultaneous processing
   eventQueue = eventQueue
-    .then(() => processBudgetChanges())
+    .then(processBudgetChanges)
     .catch((error) => {
       setStatus("Automation error: " + error.message);
       console.error(error);
@@ -59,87 +57,54 @@ function handleWorksheetChanged(event) {
 async function processBudgetChanges() {
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
-
     const resetCell = ws.getRange("F18");
-    const statusRange = ws.getRange("H3:H17");
-    const amountRange = ws.getRange("G3:G17");
-    const balanceRange = ws.getRange("C3:C17");
+    const statusesRange = ws.getRange("H3:H17");
+    const amountsRange = ws.getRange("G3:G17");
+    const balancesRange = ws.getRange("C3:C17");
     const processedRange = ws.getRange("X3:X17");
 
     resetCell.load("values");
-    statusRange.load("values");
-    amountRange.load("values");
-    balanceRange.load("values");
+    statusesRange.load("values");
+    amountsRange.load("values");
+    balancesRange.load("values");
     processedRange.load("values");
-
     await context.sync();
 
-    // 1. MONTHLY RESET
     if (resetCell.values[0][0] === true) {
-
-      statusRange.values =
-        Array.from({ length: 15 }, () => [false]);
-
+      statusesRange.values = Array.from({ length: 15 }, () => [false]);
       processedRange.clear(Excel.ClearApplyTo.contents);
-
       resetCell.values = [[false]];
-
       await context.sync();
-
-      setStatus("Monthly reset completed successfully.");
+      setStatus("Monthly reset completed. Existing balances were preserved.");
       return;
     }
 
-    // 2. PROCESS CHECKED ITEMS
-    const statuses = statusRange.values;
-    const amounts = amountRange.values;
-    const balances = balanceRange.values;
+    const statuses = statusesRange.values;
+    const amounts = amountsRange.values;
+    const balances = balancesRange.values;
     const processed = processedRange.values;
 
-    let totalAdded = 0;
     let itemsProcessed = 0;
+    let totalAdded = 0;
 
     for (let i = 0; i < 15; i++) {
+      if (statuses[i][0] !== true || processed[i][0] === true) continue;
 
-      if (
-        statuses[i][0] === true &&
-        processed[i][0] !== true
-      ) {
-        const amount = amounts[i][0];
-        const currentBalance = balances[i][0];
+      const amount = amounts[i][0];
+      if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
 
-        if (
-          typeof amount !== "number" ||
-          !Number.isFinite(amount)
-        ) {
-          continue;
-        }
-
-        const current =
-          typeof currentBalance === "number"
-            ? currentBalance
-            : 0;
-
-        // ADD instead of replacing
-        balances[i][0] = current + amount;
-
-        // Mark as already processed
-        processed[i][0] = true;
-
-        totalAdded += amount;
-        itemsProcessed++;
-      }
+      const current = typeof balances[i][0] === "number" ? balances[i][0] : 0;
+      balances[i][0] = current + amount;
+      processed[i][0] = true;
+      itemsProcessed++;
+      totalAdded += amount;
     }
 
     if (itemsProcessed > 0) {
-      balanceRange.values = balances;
+      balancesRange.values = balances;
       processedRange.values = processed;
-
       await context.sync();
-
-      setStatus(
-        `${itemsProcessed} item(s) processed. Total added: ${totalAdded}`
-      );
+      setStatus(`Processed ${itemsProcessed} item(s). Total added: ${totalAdded}.`);
     } else {
       setStatus("No new checked items to process.");
     }
