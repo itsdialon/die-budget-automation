@@ -17,10 +17,8 @@ function isRelevantAddress(address) {
   const secondRow = match[4] ? Number(match[4]) : firstRow;
 
   const touchesStatusCells =
-    firstColumn === "H" &&
-    secondColumn === "H" &&
-    firstRow <= 17 &&
-    secondRow >= 3;
+    firstColumn === "H" && secondColumn === "H" &&
+    firstRow <= 17 && secondRow >= 3;
 
   const touchesResetCell =
     (firstColumn === "F" && firstRow === 18) ||
@@ -54,31 +52,45 @@ async function registerWorksheetListener() {
 
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
+    const legacyRange = ws.getRange("X2:X17");
     let helper = context.workbook.worksheets.getItemOrNullObject("_DieBudgetAutomation");
+
+    legacyRange.load("values");
     helper.load("name");
     await context.sync();
 
-    // On the first run after this update, migrate the existing processing flags
-    // from X2:X17 into a dedicated very-hidden worksheet. This preserves any
-    // TRUE flags already written by the earlier add-in version.
+    const legacyValues = legacyRange.values;
+
+    // Create the helper sheet if needed. Otherwise, keep the existing ledger.
     if (helper.isNullObject) {
-      const legacyRange = ws.getRange("X2:X17");
-      legacyRange.load("values");
-      await context.sync();
-
       helper = context.workbook.worksheets.add("_DieBudgetAutomation");
-      const legacyValues = legacyRange.values;
-      if (!legacyValues[0][0]) {
-        legacyValues[0][0] = "Processed this month";
-      }
-      helper.getRange("A1:A16").values = legacyValues;
-
-      // Remove only the helper values previously created by this add-in.
-      legacyRange.clear(Excel.ClearApplyTo.contents);
+      const initialLedger = legacyValues.map(row => [row[0]]);
+      if (!initialLedger[0][0]) initialLedger[0][0] = "Processed this month";
+      helper.getRange("A1:A16").values = initialLedger;
+    } else {
+      const ledgerRange = helper.getRange("A1:A16");
+      ledgerRange.load("values");
       await context.sync();
+
+      const ledgerValues = ledgerRange.values;
+      if (!ledgerValues[0][0]) ledgerValues[0][0] = "Processed this month";
+
+      // Merge any remaining legacy TRUE markers into the hidden ledger.
+      // A TRUE flag is never overwritten by a blank or FALSE value.
+      for (let i = 1; i < 16; i++) {
+        if (legacyValues[i][0] === true) ledgerValues[i][0] = true;
+      }
+      ledgerRange.values = ledgerValues;
     }
 
+    // Always remove the old helper labels/flags from the visible budget sheet.
+    // X2:X17 was confirmed empty before the add-in created its tracking data.
+    legacyRange.clear(Excel.ClearApplyTo.contents);
+    ws.getRange("X:X").format.columnHidden = true;
+
     helper.visibility = Excel.SheetVisibility.veryHidden;
+
+    // Listen only to the user's checkbox/reset cells.
     ws.onChanged.add(handleWorksheetChanged);
     await context.sync();
   });
@@ -103,7 +115,6 @@ async function processBudgetChanges() {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
     const helper = context.workbook.worksheets.getItem("_DieBudgetAutomation");
 
-    // F18 is the anchor cell of the merged F18:H18 control.
     const resetCell = ws.getRange("F18");
     const statusesRange = ws.getRange("H3:H17");
     const amountsRange = ws.getRange("G3:G17");
@@ -117,8 +128,6 @@ async function processBudgetChanges() {
     processedRange.load("values");
     await context.sync();
 
-    // Monthly reset clears the 15 checkboxes and their hidden processing flags,
-    // while preserving all balances in C3:C17.
     if (resetCell.values[0][0] === true) {
       statusesRange.values = Array.from({ length: 15 }, () => [false]);
       processedRange.clear(Excel.ClearApplyTo.contents);
@@ -156,10 +165,7 @@ async function processBudgetChanges() {
       balancesRange.values = balances;
       processedRange.values = processed;
       await context.sync();
-
-      setStatus(
-        `Processed ${itemsProcessed} item(s). Total added: ${totalAdded}.`
-      );
+      setStatus(`Processed ${itemsProcessed} item(s). Total added: ${totalAdded}.`);
     } else {
       setStatus("No new checked items to process.");
     }
