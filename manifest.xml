@@ -24,6 +24,12 @@
     <Host Name="Workbook"/>
   </Hosts>
 
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="ExcelApi" MinVersion="1.7"/>
+    </Sets>
+  </Requirements>
+
   <DefaultSettings>
     <SourceLocation DefaultValue="https://itsdialon.github.io/die-budget-automation/index.html"/>
   </DefaultSettings>
