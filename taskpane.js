@@ -7,19 +7,44 @@ function setStatus(message) {
 }
 
 function isRelevantAddress(address) {
-  const normalized = String(address || "").toUpperCase().replace(/\$/g, "");
-  if (/(^|!)F18(?::H18)?$/.test(normalized)) return true;
-  return /(^|!)H(?:[3-9]|1[0-7])$/.test(normalized);
+  const normalized = String(address || "")
+    .toUpperCase()
+    .replace(/\$/g, "");
+
+  const match = normalized.match(/(?:^|!)([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+  if (!match) return false;
+
+  const firstColumn = match[1];
+  const firstRow = Number(match[2]);
+  const secondColumn = match[3] || firstColumn;
+  const secondRow = match[4] ? Number(match[4]) : firstRow;
+
+  const touchesStatusCells =
+    firstColumn === "H" &&
+    secondColumn === "H" &&
+    firstRow <= 17 &&
+    secondRow >= 3;
+
+  const touchesResetCell =
+    (firstColumn === "F" && firstRow === 18) ||
+    (secondColumn === "F" && secondRow === 18) ||
+    (firstColumn === "F" && secondColumn === "H" &&
+      firstRow <= 18 && secondRow >= 18);
+
+  return touchesStatusCells || touchesResetCell;
 }
 
 Office.onReady(async (info) => {
   if (info.host !== Office.HostType.Excel) {
-    setStatus("Please open this add-in in Excel for the web.");
+    setStatus("Please open this add-in in Excel.");
     return;
   }
 
   try {
-    if (Office.addin && Office.addin.setStartupBehavior) {
+    // Supported in Excel clients with SharedRuntime 1.1.
+    // On clients without this feature, the task pane can still run
+    // after the user opens the add-in manually.
+    if (Office.addin && typeof Office.addin.setStartupBehavior === "function") {
       await Office.addin.setStartupBehavior(Office.StartupBehavior.load);
     }
 
@@ -35,19 +60,25 @@ async function registerWorksheetListener() {
 
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
+
+    // X is currently unused in this workbook and stores per-month processing flags.
+    ws.getRange("X2").values = [["Processed this month"]];
+    ws.getRange("X:X").format.columnHidden = true;
+
     ws.onChanged.add(handleWorksheetChanged);
     await context.sync();
   });
 
   worksheetListenerRegistered = true;
-  setStatus("Die-Budget Automation is active. Change a checkbox in H3:H17 or F18.");
+  setStatus("Die-Budget Automation is active. Listening for H3:H17 and F18.");
 }
 
 function handleWorksheetChanged(event) {
   if (!isRelevantAddress(event.address)) return;
 
+  // Process events sequentially so rapid checkbox changes aren't handled concurrently.
   eventQueue = eventQueue
-    .then(processBudgetChanges)
+    .then(() => processBudgetChanges())
     .catch((error) => {
       setStatus("Automation error: " + error.message);
       console.error(error);
@@ -57,6 +88,8 @@ function handleWorksheetChanged(event) {
 async function processBudgetChanges() {
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
+
+    // F18 is the anchor cell of the merged F18:H18 control.
     const resetCell = ws.getRange("F18");
     const statusesRange = ws.getRange("H3:H17");
     const amountsRange = ws.getRange("G3:G17");
@@ -70,11 +103,13 @@ async function processBudgetChanges() {
     processedRange.load("values");
     await context.sync();
 
+    // Monthly reset: clear the flags and all 15 checkboxes, but retain balances.
     if (resetCell.values[0][0] === true) {
       statusesRange.values = Array.from({ length: 15 }, () => [false]);
       processedRange.clear(Excel.ClearApplyTo.contents);
       resetCell.values = [[false]];
       await context.sync();
+
       setStatus("Monthly reset completed. Existing balances were preserved.");
       return;
     }
@@ -93,9 +128,13 @@ async function processBudgetChanges() {
       const amount = amounts[i][0];
       if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
 
-      const current = typeof balances[i][0] === "number" ? balances[i][0] : 0;
-      balances[i][0] = current + amount;
+      const currentBalance =
+        typeof balances[i][0] === "number" ? balances[i][0] : 0;
+
+      // Add G[row] to the existing C[row]; never replace the balance with G[row].
+      balances[i][0] = currentBalance + amount;
       processed[i][0] = true;
+
       itemsProcessed++;
       totalAdded += amount;
     }
@@ -104,7 +143,10 @@ async function processBudgetChanges() {
       balancesRange.values = balances;
       processedRange.values = processed;
       await context.sync();
-      setStatus(`Processed ${itemsProcessed} item(s). Total added: ${totalAdded}.`);
+
+      setStatus(
+        `Processed ${itemsProcessed} item(s). Total added: ${totalAdded}.`
+      );
     } else {
       setStatus("No new checked items to process.");
     }
