@@ -7,10 +7,7 @@ function setStatus(message) {
 }
 
 function isRelevantAddress(address) {
-  const normalized = String(address || "")
-    .toUpperCase()
-    .replace(/\$/g, "");
-
+  const normalized = String(address || "").toUpperCase().replace(/\$/g, "");
   const match = normalized.match(/(?:^|!)([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
   if (!match) return false;
 
@@ -41,9 +38,6 @@ Office.onReady(async (info) => {
   }
 
   try {
-    // Supported in Excel clients with SharedRuntime 1.1.
-    // On clients without this feature, the task pane can still run
-    // after the user opens the add-in manually.
     if (Office.addin && typeof Office.addin.setStartupBehavior === "function") {
       await Office.addin.setStartupBehavior(Office.StartupBehavior.load);
     }
@@ -60,11 +54,31 @@ async function registerWorksheetListener() {
 
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
+    let helper = context.workbook.worksheets.getItemOrNullObject("_DieBudgetAutomation");
+    helper.load("name");
+    await context.sync();
 
-    // X is currently unused in this workbook and stores per-month processing flags.
-    ws.getRange("X2").values = [["Processed this month"]];
-    ws.getRange("X:X").format.columnHidden = true;
+    // On the first run after this update, migrate the existing processing flags
+    // from X2:X17 into a dedicated very-hidden worksheet. This preserves any
+    // TRUE flags already written by the earlier add-in version.
+    if (helper.isNullObject) {
+      const legacyRange = ws.getRange("X2:X17");
+      legacyRange.load("values");
+      await context.sync();
 
+      helper = context.workbook.worksheets.add("_DieBudgetAutomation");
+      const legacyValues = legacyRange.values;
+      if (!legacyValues[0][0]) {
+        legacyValues[0][0] = "Processed this month";
+      }
+      helper.getRange("A1:A16").values = legacyValues;
+
+      // Remove only the helper values previously created by this add-in.
+      legacyRange.clear(Excel.ClearApplyTo.contents);
+      await context.sync();
+    }
+
+    helper.visibility = Excel.SheetVisibility.veryHidden;
     ws.onChanged.add(handleWorksheetChanged);
     await context.sync();
   });
@@ -76,7 +90,6 @@ async function registerWorksheetListener() {
 function handleWorksheetChanged(event) {
   if (!isRelevantAddress(event.address)) return;
 
-  // Process events sequentially so rapid checkbox changes aren't handled concurrently.
   eventQueue = eventQueue
     .then(() => processBudgetChanges())
     .catch((error) => {
@@ -88,13 +101,14 @@ function handleWorksheetChanged(event) {
 async function processBudgetChanges() {
   await Excel.run(async (context) => {
     const ws = context.workbook.worksheets.getItem("Die-Budget");
+    const helper = context.workbook.worksheets.getItem("_DieBudgetAutomation");
 
     // F18 is the anchor cell of the merged F18:H18 control.
     const resetCell = ws.getRange("F18");
     const statusesRange = ws.getRange("H3:H17");
     const amountsRange = ws.getRange("G3:G17");
     const balancesRange = ws.getRange("C3:C17");
-    const processedRange = ws.getRange("X3:X17");
+    const processedRange = helper.getRange("A2:A16");
 
     resetCell.load("values");
     statusesRange.load("values");
@@ -103,7 +117,8 @@ async function processBudgetChanges() {
     processedRange.load("values");
     await context.sync();
 
-    // Monthly reset: clear the flags and all 15 checkboxes, but retain balances.
+    // Monthly reset clears the 15 checkboxes and their hidden processing flags,
+    // while preserving all balances in C3:C17.
     if (resetCell.values[0][0] === true) {
       statusesRange.values = Array.from({ length: 15 }, () => [false]);
       processedRange.clear(Excel.ClearApplyTo.contents);
@@ -131,10 +146,8 @@ async function processBudgetChanges() {
       const currentBalance =
         typeof balances[i][0] === "number" ? balances[i][0] : 0;
 
-      // Add G[row] to the existing C[row]; never replace the balance with G[row].
       balances[i][0] = currentBalance + amount;
       processed[i][0] = true;
-
       itemsProcessed++;
       totalAdded += amount;
     }
